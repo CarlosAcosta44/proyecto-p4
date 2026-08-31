@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model p1_dispositivo {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identificador     String              @unique
+  modelo            String?
+  creado_en         DateTime            @default(now()) @db.Timestamptz(6)
+  p1_evento_impacto p1_evento_impacto[]
+}
+
+model p1_evento_impacto {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dispositivo_id String         @db.Uuid
+  magnitud       Decimal        @db.Decimal(6, 2)
+  severidad      String
+  latitud        Float?
+  longitud       Float?
+  precision_m    Float?         @db.Real
+  ocurrido_en    DateTime       @db.Timestamptz(6)
+  recibido_en    DateTime       @default(now()) @db.Timestamptz(6)
+  clave_cliente  String
+  p1_dispositivo p1_dispositivo @relation(fields: [dispositivo_id], references: [id])
+
+  @@unique([dispositivo_id, clave_cliente])
+  @@index([ocurrido_en(sort: Desc)])
+}
+
+model p2_marcacion {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ronda_id         String           @db.Uuid
+  punto_id         Int
+  latitud          Float
+  longitud         Float
+  precision_m      Float            @db.Real
+  distancia_m      Float            @db.Real
+  aceptada         Boolean
+  motivo_rechazo   String?
+  escaneada_en     DateTime         @db.Timestamptz(6)
+  p2_punto_control p2_punto_control @relation(fields: [punto_id], references: [id])
+  p2_ronda         p2_ronda         @relation(fields: [ronda_id], references: [id])
+
+  @@unique([ronda_id, punto_id])
+}
+
+model p2_punto_control {
+  id           Int            @id @default(autoincrement())
+  codigo       String         @unique
+  nombre       String
+  latitud      Float
+  longitud     Float
+  radio_m      Int            @default(40)
+  orden        Int
+  p2_marcacion p2_marcacion[]
+}
+
+model p2_ronda {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario_id   Int
+  inicia_en    DateTime       @default(now()) @db.Timestamptz(6)
+  vence_en     DateTime       @db.Timestamptz(6)
+  estado       String         @default("en_curso")
+  p2_marcacion p2_marcacion[]
+  p2_usuario   p2_usuario     @relation(fields: [usuario_id], references: [id])
+}
+
+model p2_usuario {
+  id       Int        @id @default(autoincrement())
+  nombre   String
+  rol      String     @default("vigilante")
+  p2_ronda p2_ronda[]
+}
+
+model p3_item {
+  id            String   @id
+  codigo_barras String   @unique
+  nombre        String
+  cantidad      Int
+  estado        String
+  version       Int      @default(1)
+  foto_ruta     String?
+  modificadoEn  DateTime @default(now())
+}
+
+// ─── Proyecto 4: Asistencia con verificación biométrica ───────────────────────
+
+model p4_ficha {
+  id          Int          @id @default(autoincrement())
+  nombre      String       @unique
+  /// Coordenadas del centro del perímetro de la sede
+  latitud     Float
+  longitud    Float
+  /// Radio permitido en metros para validar la geocerca
+  radio_m     Int          @default(100)
+  /// Hora de inicio del turno (ej: "07:00")
+  hora_inicio String       @db.VarChar(5)
+  /// Hora de fin del turno (ej: "17:00")
+  hora_fin    String       @db.VarChar(5)
+  creado_en   DateTime     @default(now()) @db.Timestamptz(6)
+  usuarios    p4_usuario[]
+}
+
+model p4_usuario {
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  password_hash String
+  /// "aprendiz" o "instructor"
+  rol           String         @default("aprendiz")
+  ficha_id      Int
+  creado_en     DateTime       @default(now()) @db.Timestamptz(6)
+  ficha         p4_ficha       @relation(fields: [ficha_id], references: [id])
+  marcaciones   p4_marcacion[]
+  refresh_tokens p4_refresh_token[]
+}
+
+model p4_refresh_token {
+  id          Int        @id @default(autoincrement())
+  token       String     @unique
+  usuario_id  Int
+  expira_en   DateTime   @db.Timestamptz(6)
+  creado_en   DateTime   @default(now()) @db.Timestamptz(6)
+  revocado    Boolean    @default(false)
+  usuario     p4_usuario @relation(fields: [usuario_id], references: [id])
+}
+
+model p4_marcacion {
+  id          Int        @id @default(autoincrement())
+  usuario_id  Int
+  /// Coordenadas reportadas por el dispositivo al marcar
+  latitud     Float
+  longitud    Float
+  /// "entrada" o "salida"
+  tipo        String
+  /// "aceptada" | "rechazada_geocerca" | "rechazada_horario"
+  estado      String
+  marcado_en  DateTime   @default(now()) @db.Timestamptz(6)
+  usuario     p4_usuario @relation(fields: [usuario_id], references: [id])
+
+  @@index([usuario_id, marcado_en(sort: Desc)])
+}
